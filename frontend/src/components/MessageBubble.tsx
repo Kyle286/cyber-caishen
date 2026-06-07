@@ -18,11 +18,12 @@ export default function MessageBubble({ msg, role, hasGoal, onDecide, onDepositS
       {!isUser && <div className="avatar">{ROLE_AVATAR[msg.response?.role ?? role]}</div>}
       <div className="bubble-content">
         <div className={`bubble ${isUser ? "user" : "agent"}`}>{msg.text}</div>
-        {msg.response && !isUser && (
+        {!isUser && msg.streaming && (
+          <span className="src-tag streaming">DeepSeek 生成中…</span>
+        )}
+        {msg.response && !isUser && !msg.streaming && (
           <>
-            {msg.streaming ? (
-              <span className="src-tag streaming">DeepSeek 生成中…</span>
-            ) : msg.response.llm_used ? (
+            {msg.response.llm_used ? (
               <span className="src-tag llm">DeepSeek 生成</span>
             ) : (
               <span className="src-tag local">本地规则兜底</span>

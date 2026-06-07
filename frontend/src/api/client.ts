@@ -69,9 +69,8 @@ export async function chat(
 }
 
 export interface StreamHandlers {
-  onMeta: (meta: Omit<ChatResponse, "reply" | "llm_used">) => void;
   onDelta: (text: string) => void;
-  onDone: (llmUsed: boolean) => void;
+  onDone: (data: Omit<ChatResponse, "reply" | "llm_used">, llmUsed: boolean) => void;
 }
 
 export async function chatStream(
@@ -88,19 +87,30 @@ export async function chatStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
+  // 兼容旧后端：meta 先到、done 不带 data
+  let pendingMeta: Omit<ChatResponse, "reply" | "llm_used"> | null = null;
+
+  const flush = () => {
     const parts = buf.split("\n\n");
     buf = parts.pop() ?? "";
     for (const part of parts) {
       const line = part.trim();
       if (!line.startsWith("data:")) continue;
       const evt = JSON.parse(line.slice(5).trim());
-      if (evt.type === "meta") handlers.onMeta(evt.data);
-      else if (evt.type === "delta") handlers.onDelta(evt.text);
-      else if (evt.type === "done") handlers.onDone(evt.llm_used);
+      if (evt.type === "meta") pendingMeta = evt.data;
+      else if (evt.type === "delta") handlers.onDelta(evt.text ?? "");
+      else if (evt.type === "done") handlers.onDone(evt.data ?? pendingMeta, Boolean(evt.llm_used));
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (value) buf += decoder.decode(value, { stream: true });
+    flush();
+    if (done) {
+      buf += decoder.decode();
+      flush();
+      break;
     }
   }
 }

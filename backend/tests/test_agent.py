@@ -111,23 +111,31 @@ def test_slot_fallback_when_uncertain(temp_db, monkeypatch):
     assert resp.price.user_price == 3000
 
 
-def test_stream_chat_yields_meta_delta_done(temp_db, monkeypatch):
+def test_stream_chat_yields_delta_then_done_with_analysis(temp_db, monkeypatch):
     monkeypatch.setattr(agent.llm, "extract_slots", lambda *a, **k: None)
-    # 模拟流式产出
+    monkeypatch.setattr(agent.llm, "chat", lambda *a, **k: None)  # 补充建议走规则兜底
     monkeypatch.setattr(agent.llm, "chat_stream", lambda *a, **k: iter(["姐妹", "醒醒"]))
     goal_service.upsert_goal("iPhone", 6000, monthly_saving=2000, db_path=temp_db)
     events = list(agent.stream_chat("我好想花800块买个盲盒", "bestie", db_path=temp_db))
-    assert events[0]["type"] == "meta"
-    assert events[0]["data"]["intent"] == "purchase"
+    assert events[0]["type"] == "delta"
     deltas = [e["text"] for e in events if e["type"] == "delta"]
     assert "".join(deltas) == "姐妹醒醒"
-    assert events[-1] == {"type": "done", "llm_used": True}
+    done = events[-1]
+    assert done["type"] == "done"
+    assert done["llm_used"] is True
+    assert done["data"]["intent"] == "purchase"
+    assert done["data"]["verdict"] == "discourage"
+    assert len(done["data"]["suggestions"]) >= 1
 
 
 def test_stream_chat_fallback_when_no_stream(temp_db, monkeypatch):
     monkeypatch.setattr(agent.llm, "extract_slots", lambda *a, **k: None)
+    monkeypatch.setattr(agent.llm, "chat", lambda *a, **k: None)
     monkeypatch.setattr(agent.llm, "chat_stream", lambda *a, **k: iter([]))  # 无产出
     events = list(agent.stream_chat("我好想花800块买个盲盒", "caishen", db_path=temp_db))
-    assert events[-1] == {"type": "done", "llm_used": False}
+    done = events[-1]
+    assert done["type"] == "done"
+    assert done["llm_used"] is False
+    assert done["data"]["intent"] == "purchase"
     deltas = [e for e in events if e["type"] == "delta"]
     assert len(deltas) == 1 and deltas[0]["text"]  # 兜底文案

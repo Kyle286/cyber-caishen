@@ -259,6 +259,16 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .v-encourage { background: rgba(74, 222, 128, 0.16); color: var(--green); border: 1px solid rgba(74,222,128,.4); }
 .v-neutral { background: rgba(255, 180, 84, 0.16); color: var(--amber); border: 1px solid rgba(255,180,84,.4); }
 
+.model-suggestions-block {
+  background: rgba(124, 107, 255, 0.08);
+  border: 1px solid rgba(124, 107, 255, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.model-suggestions-head { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #c7bfff; }
+.model-suggestions-block ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; color: var(--text); }
+.model-suggestions-block li + li { margin-top: 4px; }
+
 /* 冲动指数仪表 */
 .impulse-gauge {
   background: rgba(255, 255, 255, 0.04);

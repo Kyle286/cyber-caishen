@@ -87,7 +87,7 @@ def chat(body: ChatRequest) -> ChatResponse:
 
 @app.post("/api/chat/stream")
 def chat_stream(body: ChatRequest) -> StreamingResponse:
-    """SSE 流式：先发 meta（结构化分析），再逐段发 delta（回复增量），最后 done。"""
+    """SSE 流式：逐段发 delta（回复增量），最后 done（含结构化分析与补充建议）。"""
 
     def gen():
         for event in agent.stream_chat(

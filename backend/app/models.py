@@ -101,6 +101,7 @@ class ChatResponse(BaseModel):
     impulse: Optional[ImpulseScore] = None
     opportunity_cost: list[str] = []
     cot_steps: list[CotStep] = []
+    suggestions: list[str] = []  # 模型补充建议（平替/等等党等）
     context: Optional[ChatContext] = None  # 回传更新后的上下文供前端保存
     llm_used: bool = False
 

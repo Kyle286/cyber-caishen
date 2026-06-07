@@ -9,6 +9,7 @@ import type {
   Role,
 } from "../types";
 import { chatStream, deposit, recordDecision } from "../api/client";
+import { sanitizeReply } from "../utils/reply";
 import MessageBubble from "./MessageBubble";
 
 interface Props {
@@ -33,70 +34,93 @@ const WELCOME: Record<Role, string> = {
     "你的毒舌闺蜜上线啦💅 又想剁手了是吧？说吧想买啥，我帮你扒拉扒拉底价，省得你交智商税！",
 };
 
+interface RoleSession {
+  messages: ChatMessage[];
+  context: ChatContext | null;
+}
+
 function welcomeMessage(role: Role): ChatMessage {
   return { id: `welcome-${role}`, sender: "agent", text: WELCOME[role] };
 }
 
+function freshSession(role: Role): RoleSession {
+  return { messages: [welcomeMessage(role)], context: null };
+}
+
 export default function ChatPanel({ role, model, hasGoal, onGoalMayChange, onStatsMayChange }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(role)]);
+  const [sessions, setSessions] = useState<Record<Role, RoleSession>>({
+    caishen: freshSession("caishen"),
+    bestie: freshSession("bestie"),
+  });
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [context, setContext] = useState<ChatContext | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 切换人格时重置会话，保证一个会话只有一种人格，避免角色混淆
-  useEffect(() => {
-    setMessages([welcomeMessage(role)]);
-    setContext(null);
-  }, [role]);
+  const { messages } = sessions[role];
+
+  const patchSession = (r: Role, patch: Partial<RoleSession>) => {
+    setSessions((s) => ({ ...s, [r]: { ...s[r], ...patch } }));
+  };
+
+  const setMessages = (r: Role, updater: (m: ChatMessage[]) => ChatMessage[]) => {
+    setSessions((s) => ({ ...s, [r]: { ...s[r], messages: updater(s[r].messages) } }));
+  };
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, role]);
 
   async function send(text: string) {
     const content = text.trim();
     if (!content || loading) return;
+    const activeRole = role;
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, sender: "user", text: content };
-    // 取最近若干轮作为多轮历史
-    const history: ChatTurn[] = messages
+    const history: ChatTurn[] = sessions[activeRole].messages
       .filter((m) => m.id !== "welcome-caishen" && m.id !== "welcome-bestie")
       .slice(-6)
       .map((m) => ({ sender: m.sender, text: m.text }));
-    setMessages((m) => [...m, userMsg]);
+    setMessages(activeRole, (m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
 
     const agentId = `a-${Date.now()}`;
+    const streamContext = sessions[activeRole].context;
     try {
       await chatStream(
-        { message: content, role, history, context, model },
+        { message: content, role: activeRole, history, context: streamContext, model },
         {
-          onMeta: (meta) => {
-            const resp = { ...meta, reply: "", llm_used: false } as ChatResponse;
-            setMessages((m) => [
-              ...m,
-              { id: agentId, sender: "agent", text: "", response: resp, streaming: true },
-            ]);
-            setContext(resp.context ?? null);
-            if (["purchase", "query_progress", "resist"].includes(resp.intent)) onGoalMayChange();
-          },
           onDelta: (t) => {
-            setMessages((m) => m.map((x) => (x.id === agentId ? { ...x, text: x.text + t } : x)));
+            setMessages(activeRole, (m) => {
+              const exists = m.some((x) => x.id === agentId);
+              if (!exists) {
+                return [...m, { id: agentId, sender: "agent", text: t, streaming: true }];
+              }
+              return m.map((x) => (x.id === agentId ? { ...x, text: x.text + t } : x));
+            });
           },
-          onDone: (llmUsed) => {
-            setMessages((m) =>
-              m.map((x) =>
-                x.id === agentId && x.response
-                  ? { ...x, streaming: false, response: { ...x.response, llm_used: llmUsed } }
-                  : x
-              )
+          onDone: (data, llmUsed) => {
+            setMessages(activeRole, (m) =>
+              m.map((x) => {
+                if (x.id !== agentId) return x;
+                const reply = sanitizeReply(x.text);
+                return {
+                  ...x,
+                  text: reply,
+                  streaming: false,
+                  response: data
+                    ? ({ ...data, reply, llm_used: llmUsed } as ChatResponse)
+                    : undefined,
+                };
+              })
             );
+            if (!data) return;
+            patchSession(activeRole, { context: data.context ?? null });
+            if (["purchase", "query_progress", "resist"].includes(data.intent)) onGoalMayChange();
           },
         }
       );
     } catch (e) {
-      setMessages((m) => [
+      setMessages(activeRole, (m) => [
         ...m,
         { id: `e-${Date.now()}`, sender: "agent", text: `出错了：${(e as Error).message}` },
       ]);
@@ -110,26 +134,25 @@ export default function ChatPanel({ role, model, hasGoal, onGoalMayChange, onSta
     if (!price || price.user_price == null) return;
     try {
       await recordDecision({ item: price.item, price: price.user_price, action, role });
-      setMessages((arr) => arr.map((m) => (m.id === msg.id ? { ...m, decided: action } : m)));
+      setMessages(role, (arr) => arr.map((m) => (m.id === msg.id ? { ...m, decided: action } : m)));
       onStatsMayChange();
     } catch (e) {
-      setMessages((arr) => [
+      setMessages(role, (arr) => [
         ...arr,
         { id: `e-${Date.now()}`, sender: "agent", text: `记录失败：${(e as Error).message}` },
       ]);
     }
   }
 
-  // 用户明确把省下的钱存进目标（对应现实中真去转一笔账）
   async function depositSaved(msg: ChatMessage) {
     const price = msg.response?.price;
     if (!price || price.user_price == null) return;
     try {
       await deposit(price.user_price);
-      setMessages((arr) => arr.map((m) => (m.id === msg.id ? { ...m, deposited: true } : m)));
+      setMessages(role, (arr) => arr.map((m) => (m.id === msg.id ? { ...m, deposited: true } : m)));
       onGoalMayChange();
     } catch (e) {
-      setMessages((arr) => [
+      setMessages(role, (arr) => [
         ...arr,
         { id: `e-${Date.now()}`, sender: "agent", text: `存入失败：${(e as Error).message}` },
       ]);

@@ -60,6 +60,7 @@ export interface ChatResponse {
   impulse: ImpulseScore | null;
   opportunity_cost: string[];
   cot_steps: CotStep[];
+  suggestions: string[];
   context: ChatContext | null;
   llm_used: boolean;
 }
@@ -85,7 +86,7 @@ export interface ChatMessage {
   sender: "user" | "agent";
   text: string;
   response?: ChatResponse;
-  /** 流式生成中：此期间不显示「本地兜底」，避免 meta 先到时的误判 */
+  /** 流式生成中：此期间只显示文字，分析卡等模型输出完再展示 */
   streaming?: boolean;
   decided?: DecisionAction;
   deposited?: boolean;

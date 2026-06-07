@@ -184,8 +184,12 @@ def handle_chat(
     """非流式：返回完整 ChatResponse。"""
     a = analyze(message, role, context, model, db_path)
     text = llm.chat(a.system, a.user_ctx, history=history, model=model)
-    a.response.reply = text or a.fallback_text
-    a.response.llm_used = bool(text)
+    llm_ok = bool(text)
+    a.response.reply = prompts.sanitize_reply(text or a.fallback_text)
+    a.response.llm_used = llm_ok
+    a.response.suggestions = prompts.generate_suggestions(
+        a.user_ctx, a.response.price, a.response.verdict, a.response.impact, model, llm_ok
+    )
     return a.response
 
 
@@ -197,10 +201,8 @@ def stream_chat(
     model: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> Iterator[dict]:
-    """流式：先产出结构化 meta，再逐段产出回复增量，最后 done。"""
+    """流式：先逐段产出回复增量，再 done（含结构化分析与补充建议）。"""
     a = analyze(message, role, context, model, db_path)
-    meta = a.response.model_dump(exclude={"reply", "llm_used"})
-    yield {"type": "meta", "data": meta}
 
     produced = False
     for piece in llm.chat_stream(a.system, a.user_ctx, history=history, model=model):
@@ -210,7 +212,11 @@ def stream_chat(
     if not produced:  # 无 key / 流式失败 -> 本地兜底一次性产出
         yield {"type": "delta", "text": a.fallback_text}
 
-    yield {"type": "done", "llm_used": produced}
+    a.response.suggestions = prompts.generate_suggestions(
+        a.user_ctx, a.response.price, a.response.verdict, a.response.impact, model, produced
+    )
+    meta = a.response.model_dump(exclude={"reply", "llm_used"})
+    yield {"type": "done", "llm_used": produced, "data": meta}
 
 
 def _persona_text(role, message, price, impact, verdict, history, impulse=None, oc=None) -> tuple[str, bool]:

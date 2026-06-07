@@ -16,8 +16,11 @@ interface Props {
 }
 
 export default function AnalysisCard({ resp, decided, deposited, hasGoal, onDecide, onDepositSaved }: Props) {
-  const { price, impact, verdict, impulse, opportunity_cost, cot_steps } = resp;
-  const hasContent = price || impact?.has_goal || cot_steps.length > 0;
+  const { price, impact, verdict, impulse } = resp;
+  const opportunity_cost = resp.opportunity_cost ?? [];
+  const cot_steps = resp.cot_steps ?? [];
+  const suggestions = resp.suggestions ?? [];
+  const hasContent = price || impact?.has_goal || cot_steps.length > 0 || suggestions.length > 0;
   if (!hasContent) return null;
 
   const showActions = resp.intent === "purchase" && price?.user_price != null;
@@ -27,6 +30,17 @@ export default function AnalysisCard({ resp, decided, deposited, hasGoal, onDeci
       {verdict && (
         <div className={`verdict-badge ${VERDICT_META[verdict].cls}`}>
           {VERDICT_META[verdict].emoji} {VERDICT_META[verdict].label}
+        </div>
+      )}
+
+      {suggestions && suggestions.length > 0 && (
+        <div className="model-suggestions-block">
+          <div className="model-suggestions-head">💡 模型补充建议</div>
+          <ul>
+            {suggestions.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
         </div>
       )}
 
