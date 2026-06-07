@@ -15,17 +15,27 @@ const SUGGESTIONS = [
   "我的攒钱进度怎么样了",
 ];
 
+const WELCOME: Record<Role, string> = {
+  caishen:
+    "我是赛博财神爷～ 想买点啥？把你的冲动告诉我，我帮你比比价、算算账，看这钱该不该花！💰",
+  bestie:
+    "你的毒舌闺蜜上线啦💅 又想剁手了是吧？说吧想买啥，我帮你扒拉扒拉底价，省得你交智商税！",
+};
+
+function welcomeMessage(role: Role): ChatMessage {
+  return { id: `welcome-${role}`, sender: "agent", text: WELCOME[role], response: undefined };
+}
+
 export default function ChatPanel({ role, onGoalMayChange }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      sender: "agent",
-      text: "我是赛博财神爷～ 想买点啥？把你的冲动告诉我，我帮你比比价、算算账，看这钱该不该花！💰",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(role)]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // 切换人格时重置会话，保证一个会话只有一种人格，避免角色混淆
+  useEffect(() => {
+    setMessages([welcomeMessage(role)]);
+  }, [role]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
