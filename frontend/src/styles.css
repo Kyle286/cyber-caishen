@@ -149,6 +149,15 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .link-btn:hover { color: var(--gold); }
 .primary-btn { width: 100%; margin-top: 6px; }
 
+.goal-error {
+  background: rgba(255, 107, 129, 0.15);
+  border: 1px solid rgba(255, 107, 129, 0.4);
+  color: var(--red);
+  font-size: 12.5px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
 .goal-form { display: flex; flex-direction: column; gap: 10px; }
 .goal-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
 

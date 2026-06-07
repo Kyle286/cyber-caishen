@@ -18,6 +18,9 @@ from .models import (
 
 def decide_verdict(price: Optional[PriceInfo], impact: GoalImpact) -> Verdict:
     """基于溢价率、消费占目标比例、延后天数做规则裁决。"""
+    # 没识别到具体价格时，不轻率鼓励，统一给"理性提醒"
+    if price is None or price.user_price is None:
+        return "neutral"
     overprice = price.overprice_ratio if price and price.overprice_ratio is not None else 0.0
     impact_ratio = impact.goal_impact_ratio or 0.0
     delay = impact.delay_days or 0
@@ -60,7 +63,7 @@ def handle_chat(message: str, role: str, db_path: Optional[str] = None) -> ChatR
     intent_res = intent_mod.recognize(message)
     goal = goal_service.get_current_goal(db_path)
 
-    # 设定目标意图：引导（实际写库在 API 层做，这里只回应）
+    # 设定目标意图：聊天侧只做人格化引导，真正创建目标走左侧面板 / POST /api/goal
     if intent_res.intent == "set_goal":
         impact = GoalImpact(has_goal=goal is not None, note=_goal_hint(goal))
         reply, used = _persona_text(role, message, None, impact, None)

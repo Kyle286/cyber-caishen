@@ -18,6 +18,7 @@ export default function RoleSwitch({ role, onChange }: Props) {
           key={r.id}
           className={`role-chip ${role === r.id ? "active" : ""}`}
           onClick={() => onChange(r.id)}
+          aria-pressed={role === r.id}
           title={r.desc}
         >
           <span className="role-emoji">{r.emoji}</span>

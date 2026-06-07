@@ -17,6 +17,7 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
   const [saved, setSaved] = useState("0");
   const [depositVal, setDepositVal] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 没有目标时强制展示表单；有目标时进入编辑会预填当前值
   const showForm = editing || !goal;
@@ -30,8 +31,12 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
   }
 
   async function submitGoal() {
-    if (!name.trim() || !Number(target)) return;
+    if (!name.trim() || !(Number(target) > 0)) {
+      setError("请填写目标名称和大于 0 的目标金额");
+      return;
+    }
     setBusy(true);
+    setError(null);
     try {
       const p = await setGoal({
         name: name.trim(),
@@ -41,6 +46,8 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
       });
       onUpdated(p);
       setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -48,12 +55,18 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
 
   async function doDeposit() {
     const amt = Number(depositVal);
-    if (!amt) return;
+    if (!(amt > 0)) {
+      setError("存入金额需大于 0");
+      return;
+    }
     setBusy(true);
+    setError(null);
     try {
       const p = await deposit(amt);
       onUpdated(p);
       setDepositVal("");
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -62,6 +75,8 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
   return (
     <aside className="goal-panel">
       <h2>🎯 我的攒钱目标</h2>
+
+      {error && <div className="goal-error" role="alert">{error}</div>}
 
       {!showForm && goal && (
         <>
@@ -90,6 +105,7 @@ export default function GoalPanel({ progress, onUpdated }: Props) {
           <div className="deposit-row">
             <input
               type="number"
+              min={1}
               placeholder="存入金额"
               value={depositVal}
               onChange={(e) => setDepositVal(e.target.value)}

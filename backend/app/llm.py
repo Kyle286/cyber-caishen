@@ -28,7 +28,8 @@ def chat(system: str, user: str, temperature: float = 0.9) -> Optional[str]:
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
-        # deepseek-v4-pro 为推理模型，会先消耗 reasoning tokens，需留足额度以产出正文
+        # 留足额度：若配置的是推理模型（如 deepseek-v4-pro），会先消耗 reasoning
+        # tokens，额度过小会导致正文为空而触发回退。普通对话模型用不满，无副作用。
         "max_tokens": 2000,
     }
     headers = {

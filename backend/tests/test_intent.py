@@ -36,3 +36,26 @@ def test_recognize_query_progress():
 def test_recognize_chitchat():
     r = intent.recognize("你好呀")
     assert r.intent == "chitchat"
+
+
+def test_extract_price_picks_earliest_amount():
+    # 回归：不能因为后段"2万"带单位就忽略前面真正讨论的 800
+    assert intent.extract_price("想买个800的鞋，攒到2万") == 800
+
+
+def test_extract_price_ignores_model_number():
+    # 回归：型号数字（紧跟字母）不应被当成价格
+    assert intent.extract_price("我想买iphone15") is None
+    assert intent.extract_price("入手ps5") is None
+
+
+def test_extract_price_model_number_with_real_price():
+    # 型号被忽略，真正的价格仍能识别
+    assert intent.extract_price("iphone15 plus 想花6000买") == 6000
+
+
+def test_recognize_purchase_without_price():
+    r = intent.recognize("我想买个盲盒")
+    assert r.intent == "purchase"
+    assert r.price is None
+    assert r.item == "盲盒"
