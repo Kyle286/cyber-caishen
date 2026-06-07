@@ -74,7 +74,10 @@ export default function ChatPanel({ role, model, hasGoal, onGoalMayChange, onSta
         {
           onMeta: (meta) => {
             const resp = { ...meta, reply: "", llm_used: false } as ChatResponse;
-            setMessages((m) => [...m, { id: agentId, sender: "agent", text: "", response: resp }]);
+            setMessages((m) => [
+              ...m,
+              { id: agentId, sender: "agent", text: "", response: resp, streaming: true },
+            ]);
             setContext(resp.context ?? null);
             if (["purchase", "query_progress", "resist"].includes(resp.intent)) onGoalMayChange();
           },
@@ -85,7 +88,7 @@ export default function ChatPanel({ role, model, hasGoal, onGoalMayChange, onSta
             setMessages((m) =>
               m.map((x) =>
                 x.id === agentId && x.response
-                  ? { ...x, response: { ...x.response, llm_used: llmUsed } }
+                  ? { ...x, streaming: false, response: { ...x.response, llm_used: llmUsed } }
                   : x
               )
             );

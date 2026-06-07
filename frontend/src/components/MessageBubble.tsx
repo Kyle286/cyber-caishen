@@ -20,7 +20,9 @@ export default function MessageBubble({ msg, role, hasGoal, onDecide, onDepositS
         <div className={`bubble ${isUser ? "user" : "agent"}`}>{msg.text}</div>
         {msg.response && !isUser && (
           <>
-            {msg.response.llm_used ? (
+            {msg.streaming ? (
+              <span className="src-tag streaming">DeepSeek 生成中…</span>
+            ) : msg.response.llm_used ? (
               <span className="src-tag llm">DeepSeek 生成</span>
             ) : (
               <span className="src-tag local">本地规则兜底</span>

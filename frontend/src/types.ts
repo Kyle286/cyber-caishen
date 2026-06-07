@@ -85,6 +85,8 @@ export interface ChatMessage {
   sender: "user" | "agent";
   text: string;
   response?: ChatResponse;
+  /** 流式生成中：此期间不显示「本地兜底」，避免 meta 先到时的误判 */
+  streaming?: boolean;
   decided?: DecisionAction;
   deposited?: boolean;
 }
