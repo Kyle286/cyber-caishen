@@ -48,8 +48,8 @@ export default function App() {
         <RoleSwitch role={role} onChange={setRole} />
         <div className="topbar-right">
           {stats && (stats.resisted_count > 0 || stats.bought_count > 0) && (
-            <div className="stats-badge" title="忍住的钱会自动存进攒钱目标">
-              💪 已劝退 {stats.resisted_count} 次 · 省下 ¥{stats.total_saved.toLocaleString()}
+            <div className="stats-badge" title="忍住的金额，可一键存进攒钱目标">
+              💪 已劝退 {stats.resisted_count} 次 · 免于冲动 ¥{stats.total_avoided.toLocaleString()}
             </div>
           )}
           <div className="llm-status">
@@ -72,6 +72,7 @@ export default function App() {
         <GoalPanel progress={progress} onUpdated={setProgress} />
         <ChatPanel
           role={role}
+          hasGoal={progress?.goal != null}
           onGoalMayChange={refreshGoal}
           onStatsMayChange={refreshStats}
         />

@@ -285,6 +285,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .decision-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .resist-btn { background: linear-gradient(135deg, var(--green), #2fae63); color: #06210f; }
 .bought-btn { background: rgba(255, 255, 255, 0.08); color: var(--text-dim); }
+.deposit-saved-btn { background: linear-gradient(135deg, var(--gold), var(--gold-2)); color: #2a1d05; }
 .decided-chip {
   font-size: 12.5px; padding: 8px 14px; border-radius: 12px; font-weight: 600;
 }

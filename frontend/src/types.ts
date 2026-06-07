@@ -34,7 +34,7 @@ export interface ChatTurn {
 export interface Stats {
   resisted_count: number;
   bought_count: number;
-  total_saved: number;
+  total_avoided: number;
 }
 
 export interface GoalImpact {
@@ -85,4 +85,5 @@ export interface ChatMessage {
   text: string;
   response?: ChatResponse;
   decided?: DecisionAction;
+  deposited?: boolean;
 }

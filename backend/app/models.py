@@ -114,4 +114,4 @@ class DecisionIn(BaseModel):
 class Stats(BaseModel):
     resisted_count: int = 0
     bought_count: int = 0
-    total_saved: float = 0.0
+    total_avoided: float = 0.0  # 累计"免于冲动消费"的金额（非实际已攒，需用户主动存入）

@@ -9,10 +9,13 @@ const VERDICT_META: Record<string, { label: string; cls: string; emoji: string }
 interface Props {
   resp: ChatResponse;
   decided?: DecisionAction;
+  deposited?: boolean;
+  hasGoal: boolean;
   onDecide: (action: DecisionAction) => void;
+  onDepositSaved: () => void;
 }
 
-export default function AnalysisCard({ resp, decided, onDecide }: Props) {
+export default function AnalysisCard({ resp, decided, deposited, hasGoal, onDecide, onDepositSaved }: Props) {
   const { price, impact, verdict, impulse, opportunity_cost, cot_steps } = resp;
   const hasContent = price || impact?.has_goal || cot_steps.length > 0;
   if (!hasContent) return null;
@@ -95,11 +98,7 @@ export default function AnalysisCard({ resp, decided, onDecide }: Props) {
 
       {showActions && (
         <div className="decision-row">
-          {decided ? (
-            <span className={`decided-chip ${decided}`}>
-              {decided === "resisted" ? "💪 已忍住，省下的钱进了攒钱目标" : "🛍️ 已记录这笔消费"}
-            </span>
-          ) : (
+          {!decided && (
             <>
               <button className="resist-btn" onClick={() => onDecide("resisted")}>
                 💪 我忍住了
@@ -107,6 +106,20 @@ export default function AnalysisCard({ resp, decided, onDecide }: Props) {
               <button className="bought-btn" onClick={() => onDecide("bought")}>
                 🛍️ 还是买了
               </button>
+            </>
+          )}
+          {decided === "bought" && <span className="decided-chip bought">🛍️ 已记录这笔消费</span>}
+          {decided === "resisted" && (
+            <>
+              <span className="decided-chip resisted">
+                💪 已忍住，免于冲动消费 ¥{price!.user_price!.toLocaleString()}
+              </span>
+              {hasGoal && !deposited && (
+                <button className="deposit-saved-btn" onClick={onDepositSaved}>
+                  把省下的 ¥{price!.user_price!.toLocaleString()} 存进目标 💰
+                </button>
+              )}
+              {deposited && <span className="decided-chip resisted">✅ 已存进攒钱目标</span>}
             </>
           )}
         </div>
