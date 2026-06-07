@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatContext, ChatMessage, ChatTurn, DecisionAction, Role } from "../types";
-import { chat, deposit, recordDecision } from "../api/client";
+import type {
+  ChatContext,
+  ChatMessage,
+  ChatResponse,
+  ChatTurn,
+  DecisionAction,
+  ModelId,
+  Role,
+} from "../types";
+import { chatStream, deposit, recordDecision } from "../api/client";
 import MessageBubble from "./MessageBubble";
 
 interface Props {
   role: Role;
+  model: ModelId;
   hasGoal: boolean;
   onGoalMayChange: () => void;
   onStatsMayChange: () => void;
@@ -28,7 +37,7 @@ function welcomeMessage(role: Role): ChatMessage {
   return { id: `welcome-${role}`, sender: "agent", text: WELCOME[role] };
 }
 
-export default function ChatPanel({ role, hasGoal, onGoalMayChange, onStatsMayChange }: Props) {
+export default function ChatPanel({ role, model, hasGoal, onGoalMayChange, onStatsMayChange }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage(role)]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,18 +66,32 @@ export default function ChatPanel({ role, hasGoal, onGoalMayChange, onStatsMayCh
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setLoading(true);
+
+    const agentId = `a-${Date.now()}`;
     try {
-      const resp = await chat(content, role, history, context);
-      const agentMsg: ChatMessage = {
-        id: `a-${Date.now()}`,
-        sender: "agent",
-        text: resp.reply,
-        response: resp,
-      };
-      setMessages((m) => [...m, agentMsg]);
-      setContext(resp.context ?? null);
-      if (resp.intent === "purchase" || resp.intent === "query_progress" || resp.intent === "resist")
-        onGoalMayChange();
+      await chatStream(
+        { message: content, role, history, context, model },
+        {
+          onMeta: (meta) => {
+            const resp = { ...meta, reply: "", llm_used: false } as ChatResponse;
+            setMessages((m) => [...m, { id: agentId, sender: "agent", text: "", response: resp }]);
+            setContext(resp.context ?? null);
+            if (["purchase", "query_progress", "resist"].includes(resp.intent)) onGoalMayChange();
+          },
+          onDelta: (t) => {
+            setMessages((m) => m.map((x) => (x.id === agentId ? { ...x, text: x.text + t } : x)));
+          },
+          onDone: (llmUsed) => {
+            setMessages((m) =>
+              m.map((x) =>
+                x.id === agentId && x.response
+                  ? { ...x, response: { ...x.response, llm_used: llmUsed } }
+                  : x
+              )
+            );
+          },
+        }
+      );
     } catch (e) {
       setMessages((m) => [
         ...m,
@@ -123,7 +146,7 @@ export default function ChatPanel({ role, hasGoal, onGoalMayChange, onStatsMayCh
             onDepositSaved={depositSaved}
           />
         ))}
-        {loading && (
+        {loading && messages[messages.length - 1]?.sender === "user" && (
           <div className="bubble-row from-agent">
             <div className="avatar">{role === "bestie" ? "💅" : "🧧"}</div>
             <div className="bubble agent typing">

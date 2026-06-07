@@ -99,3 +99,35 @@ def test_handle_chat_purchase_without_price(temp_db, monkeypatch):
     resp = agent.handle_chat("我想买个盲盒", "bestie", db_path=temp_db)
     assert resp.intent == "purchase"
     assert resp.verdict == "neutral"  # 无价格 -> 理性提醒
+
+
+def test_slot_fallback_when_uncertain(temp_db, monkeypatch):
+    # 未知品类商品，规则不确定 -> 用 LLM 抽槽补全
+    monkeypatch.setattr(agent.llm, "chat", lambda *a, **k: None)
+    monkeypatch.setattr(agent.llm, "extract_slots", lambda *a, **k: {"intent": "purchase", "item": "机械表", "price": 3000})
+    resp = agent.handle_chat("帮我看看那块3000的机械表", "caishen", db_path=temp_db)
+    assert resp.intent == "purchase"
+    assert resp.price is not None
+    assert resp.price.user_price == 3000
+
+
+def test_stream_chat_yields_meta_delta_done(temp_db, monkeypatch):
+    monkeypatch.setattr(agent.llm, "extract_slots", lambda *a, **k: None)
+    # 模拟流式产出
+    monkeypatch.setattr(agent.llm, "chat_stream", lambda *a, **k: iter(["姐妹", "醒醒"]))
+    goal_service.upsert_goal("iPhone", 6000, monthly_saving=2000, db_path=temp_db)
+    events = list(agent.stream_chat("我好想花800块买个盲盒", "bestie", db_path=temp_db))
+    assert events[0]["type"] == "meta"
+    assert events[0]["data"]["intent"] == "purchase"
+    deltas = [e["text"] for e in events if e["type"] == "delta"]
+    assert "".join(deltas) == "姐妹醒醒"
+    assert events[-1] == {"type": "done", "llm_used": True}
+
+
+def test_stream_chat_fallback_when_no_stream(temp_db, monkeypatch):
+    monkeypatch.setattr(agent.llm, "extract_slots", lambda *a, **k: None)
+    monkeypatch.setattr(agent.llm, "chat_stream", lambda *a, **k: iter([]))  # 无产出
+    events = list(agent.stream_chat("我好想花800块买个盲盒", "caishen", db_path=temp_db))
+    assert events[-1] == {"type": "done", "llm_used": False}
+    deltas = [e for e in events if e["type"] == "delta"]
+    assert len(deltas) == 1 and deltas[0]["text"]  # 兜底文案

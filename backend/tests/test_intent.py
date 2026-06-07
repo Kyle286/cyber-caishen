@@ -107,3 +107,27 @@ def test_followup_reuses_context_item():
     assert r.intent == "purchase"
     assert r.item == "盲盒"
     assert r.is_followup is True
+
+
+def test_is_uncertain():
+    # 闲聊但带消费信号 -> 不确定
+    assert intent.is_uncertain(intent.recognize("帮我看看618要不要囤货")) is True
+    # 纯问候 -> 确定（不必动用 LLM）
+    assert intent.is_uncertain(intent.recognize("你好呀")) is False
+    # 已识别出品类的消费 -> 确定
+    assert intent.is_uncertain(intent.recognize("我好想花800块买个盲盒")) is False
+
+
+def test_apply_slots_overrides_uncertain():
+    base = intent.recognize("帮我看看那块机械表")  # 未知品类
+    slots = {"intent": "purchase", "item": "机械表", "price": 2000}
+    r = intent.apply_slots(base, slots)
+    assert r.intent == "purchase"
+    assert r.item == "机械表"
+    assert r.price == 2000
+
+
+def test_apply_slots_ignores_invalid_intent():
+    base = intent.recognize("随便聊聊")
+    r = intent.apply_slots(base, {"intent": "nonsense"})
+    assert r.intent == base.intent

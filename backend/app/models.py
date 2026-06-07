@@ -88,6 +88,7 @@ class ChatRequest(BaseModel):
     role: Role = "caishen"
     history: list[ChatTurn] = Field(default_factory=list)
     context: Optional[ChatContext] = None
+    model: Optional[str] = None  # 前端选择的模型；非法/缺省时后端回退默认
 
 
 class ChatResponse(BaseModel):

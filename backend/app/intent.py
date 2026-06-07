@@ -167,3 +167,52 @@ def recognize(text: str, context: Optional[ChatContext] = None) -> IntentResult:
 
     # 5. 其余归为闲聊
     return IntentResult(intent="chitchat", raw=raw)
+
+
+_VALID_INTENTS = {"purchase", "set_goal", "query_progress", "resist", "chitchat"}
+_SIGNAL_KEYWORDS = ["买", "价", "贵", "值不值", "划算", "囤", "入", "种草", "剁手", "心动", "攒", "存"]
+_PAT_HAS_NUMBER = re.compile(r"\d{2,}")
+
+
+def _has_purchase_signal(text: str) -> bool:
+    return bool(_PAT_HAS_NUMBER.search(text)) or any(k in text for k in _SIGNAL_KEYWORDS)
+
+
+def is_uncertain(result: IntentResult) -> bool:
+    """规则结果是否"不够确定"，需要 LLM 兜底抽槽。
+
+    - 归为闲聊但句中带消费信号（数字/买/价/囤…）：可能漏判
+    - 判为消费却既没物品也没品类：槽位太空
+    """
+    if result.intent == "chitchat":
+        return _has_purchase_signal(result.raw)
+    if result.intent == "purchase" and not result.item and not result.category:
+        return True
+    return False
+
+
+def apply_slots(result: IntentResult, slots: dict) -> IntentResult:
+    """用 LLM 抽取的槽位修正规则结果（仅在不确定时调用）。"""
+    intent_val = slots.get("intent")
+    if intent_val not in _VALID_INTENTS:
+        return result
+    item = slots.get("item") or None
+    price = slots.get("price")
+    try:
+        price = float(price) if price is not None else None
+    except (TypeError, ValueError):
+        price = None
+
+    category = None
+    if item:
+        match = price_db.detect_category(item)
+        category = match.category if match else None
+
+    if intent_val == "set_goal":
+        return IntentResult(intent="set_goal", item=item, category=category,
+                            target_amount=price, raw=result.raw, matched_keywords=["llm"])
+    if intent_val == "purchase":
+        return IntentResult(intent="purchase", item=item, price=price, category=category,
+                            raw=result.raw, matched_keywords=["llm"])
+    return IntentResult(intent=intent_val, item=item, price=price, category=category,
+                        raw=result.raw, matched_keywords=["llm"])

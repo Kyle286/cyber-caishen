@@ -1,4 +1,5 @@
 export type Role = "caishen" | "bestie";
+export type ModelId = "deepseek-v4-flash" | "deepseek-v4-pro";
 export type IntentType = "purchase" | "set_goal" | "query_progress" | "resist" | "chitchat";
 export type Verdict = "discourage" | "encourage" | "neutral";
 export type DecisionAction = "resisted" | "bought";

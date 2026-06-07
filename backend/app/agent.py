@@ -1,11 +1,15 @@
-"""赛博财神爷 Agent 核心：意图识别 -> 比价 -> 目标进度 -> 冲动指数 -> 裁决 -> 人格化文案。
+"""赛博财神爷 Agent 核心。
 
-输出包含可见的 CoT 推理步骤、量化冲动指数与机会成本，便于前端展示"逻辑链"。
-支持多轮上下文（追问复用上一笔消费）与历史会话喂给 LLM。
+流程：意图识别(规则优先, 不确定时 LLM 抽槽) -> 比价 -> 目标进度 -> 冲动指数 ->
+机会成本 -> 裁决 -> 人格化文案(支持流式与本地兜底)。
+
+analyze() 计算除"回复正文"外的全部结构化结果，供非流式(handle_chat)与
+流式(stream_chat)两条路径复用，避免重复。
 """
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Iterator, Optional
 
 from . import goal_service, intent as intent_mod, llm, price_db, prompts
 from .models import (
@@ -20,14 +24,20 @@ from .models import (
 )
 
 
+@dataclass
+class Analysis:
+    response: ChatResponse  # 结构化部分（reply 暂空，llm_used 暂 False）
+    system: str
+    user_ctx: str
+    fallback_text: str
+
+
 def decide_verdict(price: Optional[PriceInfo], impact: GoalImpact) -> Verdict:
-    """基于溢价率、消费占目标比例、延后天数做规则裁决。"""
     if price is None or price.user_price is None:
         return "neutral"
     overprice = price.overprice_ratio if price.overprice_ratio is not None else 0.0
     impact_ratio = impact.goal_impact_ratio or 0.0
     delay = impact.delay_days or 0
-
     if overprice >= 1.0 or impact_ratio >= 0.10 or delay >= 30:
         return "discourage"
     if overprice <= 0.3 and impact_ratio <= 0.03 and delay <= 7:
@@ -36,18 +46,15 @@ def decide_verdict(price: Optional[PriceInfo], impact: GoalImpact) -> Verdict:
 
 
 def compute_impulse(price: Optional[PriceInfo], impact: Optional[GoalImpact]) -> Optional[ImpulseScore]:
-    """计算冲动指数（0-100）：溢价率 0.45 + 占目标比例 0.35 + 延后天数 0.20。"""
     if price is None or price.user_price is None:
         return None
     overprice = max(price.overprice_ratio or 0.0, 0.0)
     impact_ratio = (impact.goal_impact_ratio or 0.0) if impact else 0.0
     delay = (impact.delay_days or 0) if impact else 0
-
     s_over = min(overprice, 2.0) / 2.0
     s_impact = min(impact_ratio, 0.3) / 0.3
     s_delay = min(delay, 60) / 60
     score = int(round((0.45 * s_over + 0.35 * s_impact + 0.20 * s_delay) * 100))
-
     reasons: list[str] = []
     if overprice > 0.5:
         reasons.append(f"溢价 {overprice * 100:.0f}%")
@@ -57,7 +64,6 @@ def compute_impulse(price: Optional[PriceInfo], impact: Optional[GoalImpact]) ->
         reasons.append(f"目标延后约 {delay} 天")
     if not reasons:
         reasons.append("价格合理、对目标影响很小")
-
     if score < 30:
         level = "理智"
     elif score < 55:
@@ -77,72 +83,79 @@ def _build_cot(intent_res, price, impact, impulse, oc, verdict) -> list[CotStep]
     if intent_res.price is not None:
         detail += f"｜金额：¥{intent_res.price:.0f}"
     steps.append(CotStep(label="意图识别", detail=detail))
-
     if price:
         c = price.comment
         if price.save_if_lowest:
             c += f" 买到底价可省 ¥{price.save_if_lowest:.0f}。"
         steps.append(CotStep(label="模拟比价", detail=c))
-
     if impact:
         steps.append(CotStep(label="攒钱目标进度", detail=impact.note))
-
     if oc:
         steps.append(CotStep(label="机会成本", detail="这笔钱 " + "，".join(oc) + "。"))
-
     if impulse:
         steps.append(CotStep(label="冲动指数", detail=f"{impulse.score}/100（{impulse.level}）— " + "、".join(impulse.reasons)))
-
     if verdict:
         verdict_cn = {"discourage": "劝退 🛑", "encourage": "鼓励 ✅", "neutral": "理性提醒 ⚖️"}[verdict]
         steps.append(CotStep(label="财神裁决", detail=verdict_cn))
     return steps
 
 
-def handle_chat(
+def analyze(
     message: str,
     role: str,
-    history: Optional[list[ChatTurn]] = None,
     context: Optional[ChatContext] = None,
+    model: Optional[str] = None,
     db_path: Optional[str] = None,
-) -> ChatResponse:
+) -> Analysis:
+    """计算结构化分析与提示词材料（不含回复正文）。"""
     intent_res = intent_mod.recognize(message, context)
-    goal = goal_service.get_current_goal(db_path)
+    # 规则不确定时，用 LLM 兜底抽槽
+    if intent_mod.is_uncertain(intent_res):
+        slots = llm.extract_slots(message, model=model)
+        if slots:
+            intent_res = intent_mod.apply_slots(intent_res, slots)
 
-    # 克制 / 决定不买：给予正反馈，并引导把省下的钱存进目标
+    goal = goal_service.get_current_goal(db_path)
+    system = prompts.system_prompt(role)
+
+    def make(resp_kwargs: dict, price=None, impact=None, verdict=None, impulse=None, oc=None) -> Analysis:
+        user_ctx = prompts.build_user_context(message, price, impact, verdict, impulse, oc)
+        fallback = prompts.fallback_reply(role, message, price, impact, verdict)
+        resp = ChatResponse(reply="", role=role, llm_used=False, **resp_kwargs)
+        return Analysis(response=resp, system=system, user_ctx=user_ctx, fallback_text=fallback)
+
     if intent_res.intent == "resist":
         impact = GoalImpact(has_goal=goal is not None, note=_resist_note(goal, intent_res.price))
-        reply, used = _persona_text(role, message, None, impact, None, history)
         ctx = ChatContext(last_item=intent_res.item, last_price=intent_res.price)
-        return ChatResponse(
-            reply=reply, role=role, intent="resist", impact=impact,
-            cot_steps=_build_cot(intent_res, None, impact, None, [], None),
-            context=ctx, llm_used=used,
+        return make(
+            {"intent": "resist", "impact": impact, "context": ctx,
+             "cot_steps": _build_cot(intent_res, None, impact, None, [], None)},
+            impact=impact,
         )
 
     if intent_res.intent == "set_goal":
         impact = GoalImpact(has_goal=goal is not None, note=_goal_hint(goal, intent_res.target_amount))
-        reply, used = _persona_text(role, message, None, impact, None, history)
-        return ChatResponse(
-            reply=reply, role=role, intent="set_goal", impact=impact,
-            cot_steps=_build_cot(intent_res, None, impact, None, [], None), llm_used=used,
+        return make(
+            {"intent": "set_goal", "impact": impact,
+             "cot_steps": _build_cot(intent_res, None, impact, None, [], None)},
+            impact=impact,
         )
 
     if intent_res.intent == "query_progress":
         progress = goal_service.compute_progress(goal)
         impact = GoalImpact(has_goal=goal is not None, note=_progress_note(progress))
-        reply, used = _persona_text(role, message, None, impact, None, history)
-        return ChatResponse(
-            reply=reply, role=role, intent="query_progress", impact=impact,
-            cot_steps=_build_cot(intent_res, None, impact, None, [], None), llm_used=used,
+        return make(
+            {"intent": "query_progress", "impact": impact,
+             "cot_steps": _build_cot(intent_res, None, impact, None, [], None)},
+            impact=impact,
         )
 
     if intent_res.intent == "chitchat":
         impact = GoalImpact(has_goal=goal is not None, note=_goal_hint(goal, None))
-        reply, used = _persona_text(role, message, None, impact, None, history)
-        return ChatResponse(
-            reply=reply, role=role, intent="chitchat",
-            cot_steps=_build_cot(intent_res, None, impact, None, [], None), llm_used=used,
+        return make(
+            {"intent": "chitchat",
+             "cot_steps": _build_cot(intent_res, None, impact, None, [], None)},
+            impact=impact,
         )
 
     # 消费意图：完整推理链
@@ -151,26 +164,57 @@ def handle_chat(
     impulse = compute_impulse(price, impact)
     oc = price_db.opportunity_cost(intent_res.price)
     verdict = decide_verdict(price, impact)
-    reply, used = _persona_text(role, message, price, impact, verdict, history, impulse, oc)
     ctx = ChatContext(last_item=intent_res.item or price.item, last_price=intent_res.price)
-
-    return ChatResponse(
-        reply=reply,
-        role=role,
-        intent="purchase",
-        verdict=verdict,
-        price=price,
-        impact=impact,
-        impulse=impulse,
-        opportunity_cost=oc,
-        cot_steps=_build_cot(intent_res, price, impact, impulse, oc, verdict),
-        context=ctx,
-        llm_used=used,
+    return make(
+        {"intent": "purchase", "verdict": verdict, "price": price, "impact": impact,
+         "impulse": impulse, "opportunity_cost": oc, "context": ctx,
+         "cot_steps": _build_cot(intent_res, price, impact, impulse, oc, verdict)},
+        price=price, impact=impact, verdict=verdict, impulse=impulse, oc=oc,
     )
 
 
+def handle_chat(
+    message: str,
+    role: str,
+    history: Optional[list[ChatTurn]] = None,
+    context: Optional[ChatContext] = None,
+    model: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> ChatResponse:
+    """非流式：返回完整 ChatResponse。"""
+    a = analyze(message, role, context, model, db_path)
+    text = llm.chat(a.system, a.user_ctx, history=history, model=model)
+    a.response.reply = text or a.fallback_text
+    a.response.llm_used = bool(text)
+    return a.response
+
+
+def stream_chat(
+    message: str,
+    role: str,
+    history: Optional[list[ChatTurn]] = None,
+    context: Optional[ChatContext] = None,
+    model: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> Iterator[dict]:
+    """流式：先产出结构化 meta，再逐段产出回复增量，最后 done。"""
+    a = analyze(message, role, context, model, db_path)
+    meta = a.response.model_dump(exclude={"reply", "llm_used"})
+    yield {"type": "meta", "data": meta}
+
+    produced = False
+    for piece in llm.chat_stream(a.system, a.user_ctx, history=history, model=model):
+        produced = True
+        yield {"type": "delta", "text": piece}
+
+    if not produced:  # 无 key / 流式失败 -> 本地兜底一次性产出
+        yield {"type": "delta", "text": a.fallback_text}
+
+    yield {"type": "done", "llm_used": produced}
+
+
 def _persona_text(role, message, price, impact, verdict, history, impulse=None, oc=None) -> tuple[str, bool]:
-    """优先 LLM（含多轮历史），失败回退本地模板。返回 (文本, 是否用了LLM)。"""
+    """（保留给测试/兼容）优先 LLM，失败回退本地模板。"""
     system = prompts.system_prompt(role)
     user_ctx = prompts.build_user_context(message, price, impact, verdict, impulse, oc)
     text = llm.chat(system, user_ctx, history=history)

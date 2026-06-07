@@ -79,6 +79,13 @@ body {
 .role-text small { font-size: 10px; color: var(--text-dim); }
 
 .topbar-right { display: flex; align-items: center; gap: 14px; }
+.model-switch { display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 3px; border-radius: 10px; border: 1px solid var(--panel-border); }
+.model-chip {
+  font-size: 12px; padding: 4px 12px; border-radius: 8px;
+  background: transparent; color: var(--text-dim); font-weight: 600;
+}
+.model-chip.active { background: linear-gradient(135deg, var(--accent), #5b4bd6); color: #fff; }
+.model-chip:disabled { opacity: 0.5; }
 .stats-badge {
   font-size: 12.5px;
   font-weight: 600;

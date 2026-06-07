@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { GoalProgress, Role, Stats } from "./types";
+import type { GoalProgress, ModelId, Role, Stats } from "./types";
 import { getGoal, getHealth, getStats } from "./api/client";
 import RoleSwitch from "./components/RoleSwitch";
+import ModelSwitch from "./components/ModelSwitch";
 import GoalPanel from "./components/GoalPanel";
 import ChatPanel from "./components/ChatPanel";
 
 export default function App() {
   const [role, setRole] = useState<Role>("caishen");
+  const [model, setModel] = useState<ModelId>("deepseek-v4-flash");
   const [progress, setProgress] = useState<GoalProgress | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [llmEnabled, setLlmEnabled] = useState<boolean | null>(null);
@@ -52,6 +54,7 @@ export default function App() {
               💪 已劝退 {stats.resisted_count} 次 · 免于冲动 ¥{stats.total_avoided.toLocaleString()}
             </div>
           )}
+          {llmEnabled && <ModelSwitch model={model} onChange={setModel} />}
           <div className="llm-status">
             {llmEnabled === null && <span className="dot gray" />}
             {llmEnabled === true && (
@@ -72,6 +75,7 @@ export default function App() {
         <GoalPanel progress={progress} onUpdated={setProgress} />
         <ChatPanel
           role={role}
+          model={model}
           hasGoal={progress?.goal != null}
           onGoalMayChange={refreshGoal}
           onStatsMayChange={refreshStats}

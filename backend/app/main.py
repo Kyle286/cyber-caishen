@@ -1,13 +1,15 @@
 """FastAPI 应用入口与路由。"""
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from . import agent, decision_service, goal_service
-from .config import settings
+from .config import ALLOWED_MODELS, settings
 from .db import init_db
 from .models import (
     ChatRequest,
@@ -45,7 +47,12 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "llm_enabled": settings.llm_enabled, "model": settings.deepseek_model}
+    return {
+        "status": "ok",
+        "llm_enabled": settings.llm_enabled,
+        "model": settings.deepseek_model,
+        "models": ALLOWED_MODELS,
+    }
 
 
 @app.get("/api/goal", response_model=GoalProgress)
@@ -73,7 +80,26 @@ def deposit_goal(body: DepositIn) -> GoalProgress:
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(body: ChatRequest) -> ChatResponse:
-    return agent.handle_chat(body.message, body.role, history=body.history, context=body.context)
+    return agent.handle_chat(
+        body.message, body.role, history=body.history, context=body.context, model=body.model
+    )
+
+
+@app.post("/api/chat/stream")
+def chat_stream(body: ChatRequest) -> StreamingResponse:
+    """SSE 流式：先发 meta（结构化分析），再逐段发 delta（回复增量），最后 done。"""
+
+    def gen():
+        for event in agent.stream_chat(
+            body.message, body.role, history=body.history, context=body.context, model=body.model
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/stats", response_model=Stats)
