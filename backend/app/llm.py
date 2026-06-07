@@ -28,7 +28,8 @@ def chat(system: str, user: str, temperature: float = 0.9) -> Optional[str]:
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
-        "max_tokens": 400,
+        # deepseek-v4-pro 为推理模型，会先消耗 reasoning tokens，需留足额度以产出正文
+        "max_tokens": 2000,
     }
     headers = {
         "Authorization": f"Bearer {settings.deepseek_api_key}",
