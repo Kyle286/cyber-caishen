@@ -56,5 +56,27 @@ def test_chat_purchase_flow(client):
     assert data["intent"] == "purchase"
     assert data["verdict"] == "discourage"
     assert data["price"]["lowest_price"] == 199
-    assert len(data["cot_steps"]) == 4
+    assert len(data["cot_steps"]) >= 5
+    assert data["impulse"]["score"] > 0
     assert data["llm_used"] is False
+
+
+def test_decision_resisted_deposits_to_goal(client):
+    client.post("/api/goal", json={"name": "iPhone", "target_amount": 6000, "saved_amount": 1000})
+    r = client.post("/api/decision", json={"item": "盲盒", "price": 800, "action": "resisted", "role": "bestie"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stats"]["resisted_count"] == 1
+    assert body["stats"]["total_saved"] == 800
+    # 忍住的钱进了目标：1000 + 800
+    assert body["progress"]["goal"]["saved_amount"] == 1800
+
+
+def test_stats_counts_bought_and_resisted(client):
+    client.post("/api/goal", json={"name": "x", "target_amount": 5000})
+    client.post("/api/decision", json={"item": "a", "price": 100, "action": "resisted"})
+    client.post("/api/decision", json={"item": "b", "price": 50, "action": "bought"})
+    s = client.get("/api/stats").json()
+    assert s["resisted_count"] == 1
+    assert s["bought_count"] == 1
+    assert s["total_saved"] == 100

@@ -1,9 +1,15 @@
-import type { ChatMessage, Role } from "../types";
+import type { ChatMessage, DecisionAction, Role } from "../types";
 import AnalysisCard from "./AnalysisCard";
 
 const ROLE_AVATAR: Record<Role, string> = { caishen: "🧧", bestie: "💅" };
 
-export default function MessageBubble({ msg, role }: { msg: ChatMessage; role: Role }) {
+interface Props {
+  msg: ChatMessage;
+  role: Role;
+  onDecide: (msg: ChatMessage, action: DecisionAction) => void;
+}
+
+export default function MessageBubble({ msg, role, onDecide }: Props) {
   const isUser = msg.sender === "user";
   return (
     <div className={`bubble-row ${isUser ? "from-user" : "from-agent"}`}>
@@ -17,7 +23,11 @@ export default function MessageBubble({ msg, role }: { msg: ChatMessage; role: R
             ) : (
               <span className="src-tag local">本地规则兜底</span>
             )}
-            <AnalysisCard resp={msg.response} />
+            <AnalysisCard
+              resp={msg.response}
+              decided={msg.decided}
+              onDecide={(action) => onDecide(msg, action)}
+            />
           </>
         )}
       </div>

@@ -1,4 +1,5 @@
 from app import intent
+from app.models import ChatContext
 
 
 def test_extract_price_with_unit():
@@ -59,3 +60,50 @@ def test_recognize_purchase_without_price():
     assert r.intent == "purchase"
     assert r.price is None
     assert r.item == "盲盒"
+
+
+def test_item_uses_category_no_garbage():
+    # 回归：不能抓出"了个800的盲盒""奶茶25"这类垃圾物品名
+    assert intent.recognize("我昨天买了个800的盲盒").item == "盲盒"
+    assert intent.recognize("买杯奶茶25").item == "奶茶"
+    assert intent.recognize("种草了一个199的小裙子").item == "裙子"
+
+
+def test_item_before_verb_detected():
+    r = intent.recognize("这个口红值不值得买")
+    assert r.intent == "purchase"
+    assert r.item == "口红"
+
+
+def test_price_inquiry_without_buy_verb():
+    r = intent.recognize("5000的相机贵吗")
+    assert r.intent == "purchase"
+    assert r.item == "相机"
+    assert r.price == 5000
+
+
+def test_nearest_amount_distinguishes_salary_from_price():
+    # 月薪3000 vs 2万的包：物品价应取离物品最近的 2万
+    r = intent.recognize("我月薪3000想买2万的包")
+    assert r.intent == "purchase"
+    assert r.item == "包"
+    assert r.price == 20000
+
+
+def test_resist_intent():
+    for msg in ["我不想买了", "算了忍住", "帮我管住手"]:
+        assert intent.recognize(msg).intent == "resist"
+
+
+def test_set_goal_without_amount():
+    r = intent.recognize("我想攒钱")
+    assert r.intent == "set_goal"
+    assert r.target_amount is None
+
+
+def test_followup_reuses_context_item():
+    ctx = ChatContext(last_item="盲盒", last_price=800)
+    r = intent.recognize("那买便宜点的呢", ctx)
+    assert r.intent == "purchase"
+    assert r.item == "盲盒"
+    assert r.is_followup is True

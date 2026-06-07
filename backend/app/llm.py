@@ -10,23 +10,34 @@ from typing import Optional
 import httpx
 
 from .config import settings
+from .models import ChatTurn
 
 logger = logging.getLogger("caishen.llm")
 
+# 多轮历史最多带入的条数，避免上下文膨胀
+_MAX_HISTORY = 6
 
-def chat(system: str, user: str, temperature: float = 0.9) -> Optional[str]:
-    """调用 DeepSeek 生成文案。失败返回 None。"""
+
+def chat(
+    system: str,
+    user: str,
+    history: Optional[list[ChatTurn]] = None,
+    temperature: float = 0.9,
+) -> Optional[str]:
+    """调用 DeepSeek 生成文案（支持多轮历史）。失败返回 None。"""
     if not settings.llm_enabled:
         logger.info("未配置 DEEPSEEK_API_KEY，使用本地回退。")
         return None
 
+    messages = [{"role": "system", "content": system}]
+    for turn in (history or [])[-_MAX_HISTORY:]:
+        messages.append({"role": "assistant" if turn.sender == "agent" else "user", "content": turn.text})
+    messages.append({"role": "user", "content": user})
+
     url = f"{settings.deepseek_base_url}/chat/completions"
     payload = {
         "model": settings.deepseek_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": messages,
         "temperature": temperature,
         # 留足额度：若配置的是推理模型（如 deepseek-v4-pro），会先消耗 reasoning
         # tokens，额度过小会导致正文为空而触发回退。普通对话模型用不满，无副作用。

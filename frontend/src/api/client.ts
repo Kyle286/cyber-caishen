@@ -1,4 +1,12 @@
-import type { ChatResponse, GoalProgress, Role } from "../types";
+import type {
+  ChatContext,
+  ChatResponse,
+  ChatTurn,
+  DecisionAction,
+  GoalProgress,
+  Role,
+  Stats,
+} from "../types";
 
 const BASE = "/api";
 
@@ -43,12 +51,36 @@ export async function deposit(amount: number): Promise<GoalProgress> {
   );
 }
 
-export async function chat(message: string, role: Role): Promise<ChatResponse> {
+export async function chat(
+  message: string,
+  role: Role,
+  history: ChatTurn[] = [],
+  context: ChatContext | null = null
+): Promise<ChatResponse> {
   return handle(
     await fetch(`${BASE}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, role }),
+      body: JSON.stringify({ message, role, history, context }),
+    })
+  );
+}
+
+export async function getStats(): Promise<Stats> {
+  return handle(await fetch(`${BASE}/stats`));
+}
+
+export async function recordDecision(payload: {
+  item: string | null;
+  price: number;
+  action: DecisionAction;
+  role: Role;
+}): Promise<{ stats: Stats; progress: GoalProgress }> {
+  return handle(
+    await fetch(`${BASE}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     })
   );
 }

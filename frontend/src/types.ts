@@ -1,6 +1,7 @@
 export type Role = "caishen" | "bestie";
-export type IntentType = "purchase" | "set_goal" | "query_progress" | "chitchat";
+export type IntentType = "purchase" | "set_goal" | "query_progress" | "resist" | "chitchat";
 export type Verdict = "discourage" | "encourage" | "neutral";
+export type DecisionAction = "resisted" | "bought";
 
 export interface PriceInfo {
   item: string;
@@ -10,7 +11,30 @@ export interface PriceInfo {
   lowest_price: number;
   highest_price: number;
   overprice_ratio: number | null;
+  save_if_lowest: number | null;
   comment: string;
+}
+
+export interface ImpulseScore {
+  score: number;
+  level: string;
+  reasons: string[];
+}
+
+export interface ChatContext {
+  last_item: string | null;
+  last_price: number | null;
+}
+
+export interface ChatTurn {
+  sender: "user" | "agent";
+  text: string;
+}
+
+export interface Stats {
+  resisted_count: number;
+  bought_count: number;
+  total_saved: number;
 }
 
 export interface GoalImpact {
@@ -32,7 +56,10 @@ export interface ChatResponse {
   verdict: Verdict | null;
   price: PriceInfo | null;
   impact: GoalImpact | null;
+  impulse: ImpulseScore | null;
+  opportunity_cost: string[];
   cot_steps: CotStep[];
+  context: ChatContext | null;
   llm_used: boolean;
 }
 
@@ -57,4 +84,5 @@ export interface ChatMessage {
   sender: "user" | "agent";
   text: string;
   response?: ChatResponse;
+  decided?: DecisionAction;
 }

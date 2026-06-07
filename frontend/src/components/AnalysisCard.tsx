@@ -1,4 +1,4 @@
-import type { ChatResponse } from "../types";
+import type { ChatResponse, DecisionAction } from "../types";
 
 const VERDICT_META: Record<string, { label: string; cls: string; emoji: string }> = {
   discourage: { label: "建议劝退", cls: "v-discourage", emoji: "🛑" },
@@ -6,10 +6,18 @@ const VERDICT_META: Record<string, { label: string; cls: string; emoji: string }
   neutral: { label: "理性提醒", cls: "v-neutral", emoji: "⚖️" },
 };
 
-export default function AnalysisCard({ resp }: { resp: ChatResponse }) {
-  const { price, impact, verdict, cot_steps } = resp;
+interface Props {
+  resp: ChatResponse;
+  decided?: DecisionAction;
+  onDecide: (action: DecisionAction) => void;
+}
+
+export default function AnalysisCard({ resp, decided, onDecide }: Props) {
+  const { price, impact, verdict, impulse, opportunity_cost, cot_steps } = resp;
   const hasContent = price || impact?.has_goal || cot_steps.length > 0;
   if (!hasContent) return null;
+
+  const showActions = resp.intent === "purchase" && price?.user_price != null;
 
   return (
     <div className="analysis-card">
@@ -18,6 +26,8 @@ export default function AnalysisCard({ resp }: { resp: ChatResponse }) {
           {VERDICT_META[verdict].emoji} {VERDICT_META[verdict].label}
         </div>
       )}
+
+      {impulse && <ImpulseGauge score={impulse.score} level={impulse.level} reasons={impulse.reasons} />}
 
       {price && price.user_price != null && (
         <div className="price-block">
@@ -28,16 +38,24 @@ export default function AnalysisCard({ resp }: { resp: ChatResponse }) {
           <div className="price-bars">
             <PriceBar label="底价" value={price.lowest_price} max={price.highest_price} tone="low" />
             <PriceBar label="均价" value={price.avg_price} max={price.highest_price} tone="avg" />
-            {price.user_price != null && (
-              <PriceBar label="你的价" value={price.user_price} max={price.highest_price} tone="user" />
-            )}
+            <PriceBar label="你的价" value={price.user_price} max={price.highest_price} tone="user" />
           </div>
           {price.overprice_ratio != null && (
             <div className={`overprice ${price.overprice_ratio > 0.5 ? "bad" : "ok"}`}>
               相对底价溢价 {(price.overprice_ratio * 100).toFixed(0)}%
+              {price.save_if_lowest ? ` · 买到底价可省 ¥${price.save_if_lowest.toLocaleString()}` : ""}
             </div>
           )}
           <p className="price-comment">{price.comment}</p>
+        </div>
+      )}
+
+      {opportunity_cost.length > 0 && (
+        <div className="oc-block">
+          <span className="oc-head">💡 这笔钱</span>
+          {opportunity_cost.map((o, i) => (
+            <span key={i} className="oc-chip">{o}</span>
+          ))}
         </div>
       )}
 
@@ -62,8 +80,8 @@ export default function AnalysisCard({ resp }: { resp: ChatResponse }) {
       )}
 
       {cot_steps.length > 0 && (
-        <details className="cot-block" open>
-          <summary>🧠 推理链 (CoT)</summary>
+        <details className="cot-block">
+          <summary>🧠 推理链 (CoT) · {cot_steps.length} 步</summary>
           <ol>
             {cot_steps.map((s, i) => (
               <li key={i}>
@@ -74,6 +92,44 @@ export default function AnalysisCard({ resp }: { resp: ChatResponse }) {
           </ol>
         </details>
       )}
+
+      {showActions && (
+        <div className="decision-row">
+          {decided ? (
+            <span className={`decided-chip ${decided}`}>
+              {decided === "resisted" ? "💪 已忍住，省下的钱进了攒钱目标" : "🛍️ 已记录这笔消费"}
+            </span>
+          ) : (
+            <>
+              <button className="resist-btn" onClick={() => onDecide("resisted")}>
+                💪 我忍住了
+              </button>
+              <button className="bought-btn" onClick={() => onDecide("bought")}>
+                🛍️ 还是买了
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImpulseGauge({ score, level, reasons }: { score: number; level: string; reasons: string[] }) {
+  const tone = score < 30 ? "calm" : score < 55 ? "mild" : score < 80 ? "high" : "max";
+  return (
+    <div className={`impulse-gauge tone-${tone}`}>
+      <div className="impulse-top">
+        <span className="impulse-title">🔥 冲动指数</span>
+        <span className="impulse-score">
+          {score}
+          <small>/100 · {level}</small>
+        </span>
+      </div>
+      <div className="impulse-track">
+        <div className="impulse-fill" style={{ width: `${score}%` }} />
+      </div>
+      <div className="impulse-reasons">{reasons.join(" · ")}</div>
     </div>
   );
 }

@@ -45,7 +45,9 @@ def test_handle_chat_purchase_fallback(temp_db, monkeypatch):
     assert resp.price is not None
     assert resp.verdict is not None
     assert resp.llm_used is False
-    assert len(resp.cot_steps) == 4
+    assert len(resp.cot_steps) >= 5  # 意图/比价/目标/机会成本/冲动指数/裁决
+    assert resp.impulse is not None
+    assert resp.opportunity_cost
     assert resp.reply  # 非空
 
 

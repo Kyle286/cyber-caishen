@@ -78,6 +78,17 @@ body {
 .role-text { display: flex; flex-direction: column; text-align: left; line-height: 1.2; }
 .role-text small { font-size: 10px; color: var(--text-dim); }
 
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.stats-badge {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--green);
+  background: rgba(74, 222, 128, 0.12);
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  padding: 6px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
 .llm-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .dot.green { background: var(--green); box-shadow: 0 0 8px var(--green); }
@@ -238,6 +249,47 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .v-discourage { background: rgba(255, 107, 129, 0.18); color: var(--red); border: 1px solid rgba(255,107,129,.4); }
 .v-encourage { background: rgba(74, 222, 128, 0.16); color: var(--green); border: 1px solid rgba(74,222,128,.4); }
 .v-neutral { background: rgba(255, 180, 84, 0.16); color: var(--amber); border: 1px solid rgba(255,180,84,.4); }
+
+/* 冲动指数仪表 */
+.impulse-gauge {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.impulse-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.impulse-title { font-size: 13px; font-weight: 600; }
+.impulse-score { font-size: 20px; font-weight: 800; }
+.impulse-score small { font-size: 11px; font-weight: 500; color: var(--text-dim); margin-left: 2px; }
+.impulse-track { height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.impulse-fill { height: 100%; border-radius: 6px; transition: width 0.7s ease; }
+.impulse-reasons { font-size: 11.5px; color: var(--text-dim); margin-top: 6px; }
+.tone-calm .impulse-fill { background: var(--green); }
+.tone-calm .impulse-score { color: var(--green); }
+.tone-mild .impulse-fill { background: var(--gold); }
+.tone-mild .impulse-score { color: var(--gold); }
+.tone-high .impulse-fill { background: var(--amber); }
+.tone-high .impulse-score { color: var(--amber); }
+.tone-max .impulse-fill { background: var(--red); }
+.tone-max .impulse-score { color: var(--red); }
+
+/* 机会成本 */
+.oc-block { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.oc-head { font-size: 12.5px; font-weight: 600; }
+.oc-chip {
+  font-size: 12px; padding: 4px 10px; border-radius: 10px;
+  background: rgba(124, 107, 255, 0.16); color: #c7bfff;
+}
+
+/* 决策按钮 */
+.decision-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.resist-btn { background: linear-gradient(135deg, var(--green), #2fae63); color: #06210f; }
+.bought-btn { background: rgba(255, 255, 255, 0.08); color: var(--text-dim); }
+.decided-chip {
+  font-size: 12.5px; padding: 8px 14px; border-radius: 12px; font-weight: 600;
+}
+.decided-chip.resisted { background: rgba(74, 222, 128, 0.16); color: var(--green); }
+.decided-chip.bought { background: rgba(255, 255, 255, 0.06); color: var(--text-dim); }
 
 .price-head, .impact-head { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .cat-tag { font-size: 10px; padding: 2px 8px; border-radius: 8px; background: rgba(124, 107, 255, 0.2); color: #c7bfff; }

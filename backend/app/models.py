@@ -6,8 +6,9 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 Role = Literal["caishen", "bestie"]
-IntentType = Literal["purchase", "set_goal", "query_progress", "chitchat"]
+IntentType = Literal["purchase", "set_goal", "query_progress", "resist", "chitchat"]
 Verdict = Literal["discourage", "encourage", "neutral"]
+DecisionAction = Literal["resisted", "bought"]
 
 
 class GoalIn(BaseModel):
@@ -46,6 +47,7 @@ class PriceInfo(BaseModel):
     lowest_price: float
     highest_price: float
     overprice_ratio: Optional[float] = None  # 用户价格相对底价的溢价率
+    save_if_lowest: Optional[float] = None  # 若买到底价可省的钱
     comment: str
 
 
@@ -57,14 +59,35 @@ class GoalImpact(BaseModel):
     note: str
 
 
+class ImpulseScore(BaseModel):
+    """冲动指数（0-100，越高越该忍住）。"""
+    score: int
+    level: str  # 理智 / 犹豫 / 冲动 / 剁手警告
+    reasons: list[str] = []
+
+
 class CotStep(BaseModel):
     label: str
     detail: str
 
 
+class ChatTurn(BaseModel):
+    """多轮历史中的一条消息。"""
+    sender: Literal["user", "agent"]
+    text: str
+
+
+class ChatContext(BaseModel):
+    """上下文补槽：上一笔被讨论的消费，用于'那买便宜点的呢'这类追问。"""
+    last_item: Optional[str] = None
+    last_price: Optional[float] = None
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     role: Role = "caishen"
+    history: list[ChatTurn] = Field(default_factory=list)
+    context: Optional[ChatContext] = None
 
 
 class ChatResponse(BaseModel):
@@ -74,5 +97,21 @@ class ChatResponse(BaseModel):
     verdict: Optional[Verdict] = None
     price: Optional[PriceInfo] = None
     impact: Optional[GoalImpact] = None
+    impulse: Optional[ImpulseScore] = None
+    opportunity_cost: list[str] = []
     cot_steps: list[CotStep] = []
+    context: Optional[ChatContext] = None  # 回传更新后的上下文供前端保存
     llm_used: bool = False
+
+
+class DecisionIn(BaseModel):
+    item: Optional[str] = None
+    price: float = Field(..., gt=0)
+    action: DecisionAction
+    role: Role = "caishen"
+
+
+class Stats(BaseModel):
+    resisted_count: int = 0
+    bought_count: int = 0
+    total_saved: float = 0.0

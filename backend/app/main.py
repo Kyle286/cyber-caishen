@@ -6,15 +6,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import agent, goal_service
+from . import agent, decision_service, goal_service
 from .config import settings
 from .db import init_db
 from .models import (
     ChatRequest,
     ChatResponse,
+    DecisionIn,
     DepositIn,
     GoalIn,
     GoalProgress,
+    Stats,
 )
 
 
@@ -71,4 +73,15 @@ def deposit_goal(body: DepositIn) -> GoalProgress:
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(body: ChatRequest) -> ChatResponse:
-    return agent.handle_chat(body.message, body.role)
+    return agent.handle_chat(body.message, body.role, history=body.history, context=body.context)
+
+
+@app.get("/api/stats", response_model=Stats)
+def get_stats() -> Stats:
+    return decision_service.get_stats()
+
+
+@app.post("/api/decision")
+def record_decision(body: DecisionIn) -> dict:
+    stats, progress = decision_service.record_decision(body.item, body.price, body.action, body.role)
+    return {"stats": stats, "progress": progress}

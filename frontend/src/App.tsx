@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import type { GoalProgress, Role } from "./types";
-import { getGoal, getHealth } from "./api/client";
+import type { GoalProgress, Role, Stats } from "./types";
+import { getGoal, getHealth, getStats } from "./api/client";
 import RoleSwitch from "./components/RoleSwitch";
 import GoalPanel from "./components/GoalPanel";
 import ChatPanel from "./components/ChatPanel";
@@ -8,6 +8,7 @@ import ChatPanel from "./components/ChatPanel";
 export default function App() {
   const [role, setRole] = useState<Role>("caishen");
   const [progress, setProgress] = useState<GoalProgress | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [llmEnabled, setLlmEnabled] = useState<boolean | null>(null);
 
   const refreshGoal = useCallback(async () => {
@@ -18,12 +19,21 @@ export default function App() {
     }
   }, []);
 
+  const refreshStats = useCallback(async () => {
+    try {
+      setStats(await getStats());
+    } catch {
+      /* 静默 */
+    }
+  }, []);
+
   useEffect(() => {
     refreshGoal();
+    refreshStats();
     getHealth()
       .then((h) => setLlmEnabled(h.llm_enabled))
       .catch(() => setLlmEnabled(null));
-  }, [refreshGoal]);
+  }, [refreshGoal, refreshStats]);
 
   return (
     <div className="app">
@@ -36,24 +46,35 @@ export default function App() {
           </div>
         </div>
         <RoleSwitch role={role} onChange={setRole} />
-        <div className="llm-status">
-          {llmEnabled === null && <span className="dot gray" />}
-          {llmEnabled === true && (
-            <>
-              <span className="dot green" /> DeepSeek 已接入
-            </>
+        <div className="topbar-right">
+          {stats && (stats.resisted_count > 0 || stats.bought_count > 0) && (
+            <div className="stats-badge" title="忍住的钱会自动存进攒钱目标">
+              💪 已劝退 {stats.resisted_count} 次 · 省下 ¥{stats.total_saved.toLocaleString()}
+            </div>
           )}
-          {llmEnabled === false && (
-            <>
-              <span className="dot amber" /> 本地兜底模式
-            </>
-          )}
+          <div className="llm-status">
+            {llmEnabled === null && <span className="dot gray" />}
+            {llmEnabled === true && (
+              <>
+                <span className="dot green" /> DeepSeek 已接入
+              </>
+            )}
+            {llmEnabled === false && (
+              <>
+                <span className="dot amber" /> 本地兜底模式
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="layout">
         <GoalPanel progress={progress} onUpdated={setProgress} />
-        <ChatPanel role={role} onGoalMayChange={refreshGoal} />
+        <ChatPanel
+          role={role}
+          onGoalMayChange={refreshGoal}
+          onStatsMayChange={refreshStats}
+        />
       </main>
     </div>
   );
